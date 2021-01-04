@@ -1,0 +1,25 @@
+{
+  "name": "asteroids",
+  "version": "1.0.0",
+  "description": "Personal Asteroids intro page",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack serve",
+    "build": "webpack",
+    "test": "jest",
+    "lint": "standard --fix"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@webpack-cli/serve": "^1.1.0",
+    "css-loader": "^5.0.1",
+    "html-webpack-plugin": "^4.5.0",
+    "jest": "^26.6.3",
+    "standard": "^16.0.3",
+    "style-loader": "^2.0.0",
+    "webpack": "^5.6.0",
+    "webpack-cli": "^4.2.0",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
