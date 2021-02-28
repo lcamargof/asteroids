@@ -8,6 +8,7 @@ class Ship {
     this.angle = 90 / 180 * Math.PI // convert to radians
     this.rotation = 0
     this.moving = false
+    this.dead = false
     this.blinkNum = Math.ceil(3 / 0.1)
     this.blinkTime = Math.ceil(0.1 * 60)
     this.lasers = []

@@ -4,13 +4,14 @@ import Ship from './lib/Ship'
 (() => {
   // Game settings
   const FPS = 60
+  const GAME_LIVES = 3 // starting number of lives
   const TURN_SPEED = 360 // turn speed in degrees per second
   const LASER_MAX = 100 // Max number of lasers on the screen at once
   const LASER_SPEED = 500 // Speed of lasers in pixels per second
   const LASER_DIST = 0.4 // Max distance for laser to travel, 1 is screen size
   const FRICTION = 0.7 // fiction coefficient of space? (0 = no friction, 1 = lot of friction)
   const SHIP_ACC = 5
-  const ASTEROID_NUM = 20 // starting number of asteroids
+  const ASTEROID_NUM = 10 // starting number of asteroids
   const ASTEROID_JAG = 0.5 // jaggednes of the asteroids (0 = none; 1 = lots)
   const ASTEROID_SPEED = 50 // asteroid movement speed (pixels per second)
   const ASTEROID_SIZE = 100 // starting size of asteroid in pixels
@@ -22,15 +23,23 @@ import Ship from './lib/Ship'
   // Flags
   const SHOW_BOUNDING = true // show or hide collision bounding
   const SHOW_CENTRE_DOT = false // show or hide ships centre dot
+  const TEXT_FADE_TIME = 2.5 // text fade time in seconds
+  const TEXT_SIZE = 40 // text font size
+  const SHIP_SIZE = 30
+  const ASTEROID_POINTS = {
+    50: 20,
+    25: 50,
+    13: 100
+  }
 
   const canvas = document.getElementById('main')
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   const ctx = canvas.getContext('2d')
 
-  let ship = new Ship(canvas.width / 2, canvas.height / 2)
-  let asteroids = []
-  createAsteroidBelt()
+  // TODO: Make it different
+  let ship, asteroids, level, lives, text, textAlpha, score, scoreHigh
+  newGame()
 
   // Set event handlers
   document.addEventListener('keydown', keyDown)
@@ -40,6 +49,10 @@ import Ship from './lib/Ship'
 
 
   function keyUp ({ keyCode }) {
+    if (ship.dead) {
+      return
+    }
+
     switch (keyCode) {
       case 37: // left
         ship.rotation = 0
@@ -57,6 +70,10 @@ import Ship from './lib/Ship'
   }
 
   function keyDown ({ keyCode }) {
+    if (ship.dead) {
+      return
+    }
+
     switch (keyCode) {
       case 37: // left
         ship.rotation = TURN_SPEED / 180 * Math.PI / FPS
@@ -90,10 +107,28 @@ import Ship from './lib/Ship'
     ship.canShoot = false
   }
 
+  // TODO: Move to their own class
+  function newGame() {
+    ship = new Ship(canvas.width / 2, canvas.height / 2)
+    level = 0
+    score = 0
+    scoreHigh = Number(localStorage.getItem('highscore')) || 0
+    lives = GAME_LIVES
+    newLevel()
+  }
+
+  // TODO: Move to their own class
+  function newLevel() {
+    text = `Level ${level+1}`
+    textAlpha = 1.0
+    createAsteroidBelt()
+  }
+
   function createAsteroidBelt() {
     asteroids = []
     let x, y
-    for (let i = 0; i < ASTEROID_NUM; i++) {
+    // level = 0 by default
+    for (let i = 0; i < ASTEROID_NUM + level; i++) {
       do {
         [x, y] = [Math.floor(Math.random() * canvas.width), Math.floor(Math.random() * canvas.height)]
       } while(distBetweenPoints(ship.x, ship.y, x, y) < ASTEROID_SIZE * 2 + ship.radius)
@@ -103,6 +138,7 @@ import Ship from './lib/Ship'
 
   function destroyAsteroid(index) {
     const { x, y, radius } = asteroids[index]
+    console.log(radius)
 
     // TODO: Make this prettier
     // split the asteroid in two if needed
@@ -111,7 +147,19 @@ import Ship from './lib/Ship'
       asteroids.push(createAsteroid(x, y, Math.ceil(radius / 2)))
     }
 
+    score += ASTEROID_POINTS[radius]
+
+    if (score > scoreHigh) {
+      scoreHigh = score
+    }
+
     asteroids.splice(index, 1)
+
+    // new level when no more asteroids
+    if (!asteroids.length) {
+      level++
+      newLevel()
+    }
   }
 
   function distBetweenPoints(x1, y1, x2, y2) {
@@ -119,11 +167,14 @@ import Ship from './lib/Ship'
   }
 
   function createAsteroid(x, y, radius) {
+    // TODO: Difficulty
+    const lvlMult = 1 + 0.1 + level
+
     const asteroid = {
       x,
       y,
-      xv: Math.random() * ASTEROID_SPEED / FPS * (Math.random() < 0.5 ? 1 : -1),
-      yv: Math.random() * ASTEROID_SPEED / FPS * (Math.random() < 0.5 ? 1 : -1),
+      xv: Math.random() * (ASTEROID_SPEED * lvlMult) / FPS * (Math.random() < 0.5 ? 1 : -1),
+      yv: Math.random() * (ASTEROID_SPEED * lvlMult) / FPS * (Math.random() < 0.5 ? 1 : -1),
       radius,
       angle: Math.random() * Math.PI * 2,
       v: Math.floor(Math.random() * (ASTEROID_VERTICES + 1) + ASTEROID_VERTICES / 2),
@@ -142,6 +193,40 @@ import Ship from './lib/Ship'
     ship.explodeTime = Math.ceil(SHIP_EXPLODE_DURATION * FPS)
   }
 
+  function gameOver() {
+    ship.dead = true
+    text = "Game Over"
+    textAlpha = 1.0
+
+    if (score >= scoreHigh) {
+      console.log('setting high')
+      localStorage.setItem('highscore', `${score}`)
+    }
+  }
+
+  function drawShip (x, y, angle, colour = 'white') {
+    ctx.strokeStyle = colour
+    ctx.lineWidth = 30 / 20
+    ctx.beginPath()
+    // nose of the ship
+    ctx.moveTo(
+      x + 4 / 3 * ship.radius * Math.cos(angle),
+      y - 4 / 3 * ship.radius * Math.sin(angle)
+    )
+    // rear left
+    ctx.lineTo(
+      x - ship.radius * (2 / 3 * Math.cos(angle) + Math.sin(angle)),
+      y + ship.radius * (2 / 3 * Math.sin(angle) - Math.cos(angle))
+    )
+    // rear right
+    ctx.lineTo(
+      x - ship.radius * (2 / 3 * Math.cos(angle) - Math.sin(angle)),
+      y + ship.radius * (2 / 3 * Math.sin(angle) + Math.cos(angle))
+    )
+    ctx.closePath()
+    ctx.stroke()
+  }
+
   function update () {
     const exploding = ship.explodeTime > 0
     const blinkOn = ship.blinkNum % 2 === 0
@@ -151,7 +236,7 @@ import Ship from './lib/Ship'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // Move the ship
-    if (ship.moving) {
+    if (ship.moving && !ship.dead) {
       ship.movement.x += SHIP_ACC * Math.cos(ship.angle) / FPS
       ship.movement.y -= SHIP_ACC * Math.sin(ship.angle) / FPS
 
@@ -186,28 +271,9 @@ import Ship from './lib/Ship'
     }
 
     if (!exploding) {
-      if (blinkOn) {
+      if (blinkOn && !ship.dead) {
         // draw ship (triangular)
-        ctx.strokeStyle = 'white'
-        ctx.lineWidth = 30 / 20
-        ctx.beginPath()
-        // nose of the ship
-        ctx.moveTo(
-          ship.x + 4 / 3 * ship.radius * Math.cos(ship.angle),
-          ship.y - 4 / 3 * ship.radius * Math.sin(ship.angle)
-        )
-        // rear left
-        ctx.lineTo(
-          ship.x - ship.radius * (2 / 3 * Math.cos(ship.angle) + Math.sin(ship.angle)),
-          ship.y + ship.radius * (2 / 3 * Math.sin(ship.angle) - Math.cos(ship.angle))
-        )
-        // rear right
-        ctx.lineTo(
-          ship.x - ship.radius * (2 / 3 * Math.cos(ship.angle) - Math.sin(ship.angle)),
-          ship.y + ship.radius * (2 / 3 * Math.sin(ship.angle) + Math.cos(ship.angle))
-        )
-        ctx.closePath()
-        ctx.stroke()
+        drawShip(ship.x, ship.y, ship.angle)
       }
 
       if (ship.blinkNum > 0) {
@@ -305,6 +371,40 @@ import Ship from './lib/Ship'
       }
     }
 
+    // Draw the game text
+    if (textAlpha) {
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`
+      ctx.font = `small-caps ${TEXT_SIZE}px dejavu sans mono`
+      ctx.fillText(text, canvas.width / 2, canvas.height * 0.75)
+      if (!ship.dead) {
+        textAlpha -= (1.0 / TEXT_FADE_TIME / FPS)
+      }
+    }
+
+    // draw lives
+    // TODO: HANDLE LIVES
+    let lifeColour
+    for (let i = 0; i < lives; i++) {
+      lifeColour = exploding && i === (lives - 1) ? 'red' : 'white'
+      drawShip(SHIP_SIZE + i * SHIP_SIZE * 1.2, SHIP_SIZE, 0.5 * Math.PI, lifeColour)
+    }
+
+    // Draw score
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'white'
+    ctx.font = `${TEXT_SIZE}px dejavu sans mono`
+    ctx.fillText(`SCORE: ${score}`, canvas.width - SHIP_SIZE /2, SHIP_SIZE)
+
+    // Draw high score
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'white'
+    ctx.font = `${TEXT_SIZE}px dejavu sans mono`
+    ctx.fillText(`HIGH: ${scoreHigh}`, canvas.width /2, SHIP_SIZE)
+
     // Detect laser colision
     for (let i = asteroids.length - 1; i >= 0; i--) {
       // grab asteroid props
@@ -331,7 +431,7 @@ import Ship from './lib/Ship'
     // Check collisions
     if (!exploding) {
       // Handle collision if ship is "playing"
-      if (ship.blinkNum === 0) {
+      if (ship.blinkNum === 0 && !ship.dead) {
         for (let i = 0; i< asteroids.length; i++) {
           if (distBetweenPoints(ship.x, ship.y, asteroids[i].x, asteroids[i].y) < ship.radius + asteroids[i].radius) {
             explodeShip()
@@ -351,7 +451,13 @@ import Ship from './lib/Ship'
       ship.explodeTime--
 
       if (ship.explodeTime == 0) {
-        ship = new Ship(canvas.width / 2, canvas.height / 2)
+        lives--
+        // Game Over
+        if (!lives) {
+          gameOver()
+        } else {
+          ship = new Ship(canvas.width / 2, canvas.height / 2)
+        }
       }
      }
 
